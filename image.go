@@ -1,9 +1,14 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"image/color"
+	"log"
+	"strings"
 	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // PixelColor are the colors we use
@@ -24,6 +29,17 @@ var PixelColor color.Palette = []color.Color{
 	color.RGBA{0, 0, 234, 255},
 	color.RGBA{207, 110, 228, 255},
 	color.RGBA{140, 0, 128, 255},
+}
+
+// Response comes from the websocket server as json
+type Response struct {
+	Type   string  `json:"type"` // pixel
+	Pixels []Pixel `json:"pixels"`
+}
+
+// NewResponse creates a new struct
+func NewResponse() Response {
+	return Response{}
 }
 
 // Pixel is a json string from the websocket
@@ -47,6 +63,52 @@ func (p *Pixel) String() string {
 	return fmt.Sprintf("X: %d, Y: %d, C: %d\n", p.X, p.Y, p.Color)
 }
 
-func hexToRgb(c byte) {
+// Save saves the pixel in the database
+func (p *Pixel) Save() error {
+	initdb()
+
+	_, err := db.Exec(
+		"insert into pixel(id, x, y, color, created) values(NULL, ?, ?, ?, ?)",
+		p.X, p.Y, p.Color, p.Created,
+	)
+
+	return err
+}
+
+func massInsert(pixels []Pixel) error {
+	//initdb()
+	//defer closedb()
+
+	query := "insert into pixel(id, x, y, color, created) values"
+	vals := []interface{}{}
+
+	for _, p := range pixels {
+		query += "(NULL, ?, ?, ?, ?),"
+		vals = append(vals, p.X, p.Y, p.Color, p.Created)
+	}
+	query = strings.TrimSuffix(query, ",")
+
+	stmt, err := db.Prepare(query)
+	if err != nil {
+		log.Printf("massInsert: statement prepare failed, %v\n", err)
+		return err
+	}
+	_, err = stmt.Exec(vals...)
+	log.Printf("Saved %d pixels\n", len(pixels))
+	return err
+}
+
+func initdb() (err error) {
+	if db == nil {
+		db, err = sql.Open("sqlite3", "pixel.db")
+		return err
+	}
+	return nil
 
 }
+
+func closedb() error {
+	return db.Close()
+}
+
+var db *sql.DB
