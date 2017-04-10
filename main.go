@@ -6,22 +6,22 @@ import (
 	"image/png"
 	"log"
 	"os"
+	"time"
 )
 
 func main() {
 	dbfile := flag.String("db", "", "the pixel database")
 	// dateStart := flag.String("start", "", "ex: 2017-04-10 01:23:45")
-	end := flag.String("end", "", "the time when to render the map ex: 2017-04-10 01:23:45")
+	end := flag.String("end", time.Now().Format("2006-01-02 15:05:05"), "the time when to render the map ex: 2017-04-10 01:23:45")
 	flag.Parse()
 
 	if *dbfile == "" {
-		return
+		log.Fatalln("no database found")
 	}
 
 	pixel, err := extractData(*dbfile, *end)
 	if err != nil {
-		log.Printf("error while extracting data: %v\n", err)
-		return
+		log.Fatalf("error while extracting data: %v\n", err)
 	}
 
 	log.Printf("Found %d pixels to render\n", len(pixel))
