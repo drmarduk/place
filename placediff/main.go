@@ -24,6 +24,7 @@ func main() {
 	templateFile := flag.String("template", "", "the original template file to diff agains current pixelmap")
 	outfile := flag.String("difffile", "diff.png", "the name of the diff png-image/textfile")
 	text := flag.Bool("noimage", false, "false (default) for image output, true for text output")
+	trans := flag.Bool("trans", false, "orig image is in background")
 	flag.Parse()
 
 	if *templateFile == "" {
@@ -42,7 +43,7 @@ func main() {
 	}
 	board := convertToImage(width, height, pixel)
 
-	diff := compareImages(template, board, *text)
+	diff := compareImages(template, board, *text, *trans)
 	filename := sanitizeOutfile(*text, *outfile)
 
 	if !*text { // only write if we want an image
@@ -72,13 +73,13 @@ func saveImage(filename string, src image.Image) error {
 	return png.Encode(f, src)
 }
 
-func compareImages(template, current image.Image, text bool) image.Image {
+func compareImages(template, current image.Image, text, trans bool) image.Image {
 	var re image.Rectangle
-	var result *image.Paletted
+	var result *image.RGBA
 
 	if !text {
 		re = image.Rect(0, 0, width, height)
-		result = image.NewPaletted(re, PixelColor)
+		result = image.NewRGBA(re) // , PixelColor)
 	}
 
 	f := func(c color.Color) string {
@@ -89,11 +90,15 @@ func compareImages(template, current image.Image, text bool) image.Image {
 	for x := 0; x < width; x++ {
 		for y := 0; y < height; y++ {
 			srcColor := template.At(x, y)
+			boardColor := current.At(x, y)
 			r, g, b, a := srcColor.RGBA()
+			rr, gg, bb, _ := boardColor.RGBA()
 
+			if trans {
+				n := color.RGBA{R: uint8(rr), G: uint8(gg), B: uint8(bb), A: 40}
+				result.SetRGBA(x, y, n)
+			}
 			if a != 0 { // only look at pixel with alphachannel <> 0
-				boardColor := current.At(x, y)
-				rr, gg, bb, _ := boardColor.RGBA()
 
 				if r != rr || g != gg || b != bb {
 					// this is ugly, the func should accept a ReadWriter and write to this
@@ -109,7 +114,8 @@ func compareImages(template, current image.Image, text bool) image.Image {
 		}
 	}
 	// maybe write here to the writer
-	return result
+	x := image.Rect(950, 1500, 2000, 2000)
+	return result.SubImage(x)
 }
 
 func readTemplate(file string) (image.Image, error) {
