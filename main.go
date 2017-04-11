@@ -1,34 +1,39 @@
 package main
 
 import (
+	"encoding/json"
+	"flag"
 	"log"
 	"time"
-
-	"encoding/json"
 
 	"golang.org/x/net/websocket"
 )
 
-var (
-	width  = 4000
-	height = 4000
-)
-
 func main() {
+	dbfile := flag.String("db", "pxls.space.db", "the name of the database to store all pixels")
+	websocket := flag.String("ws", "ws://pxls.space/ws", "the uri of the websocket to connect, eg. ws://url.tld/path")
+	flag.Parse()
+
+	if err := installTables(*dbfile); err != nil {
+		log.Fatalf("error while createing database: %v\n", err)
+	} else {
+		log.Print("db already there")
+	}
+
 	savechan := make(chan Response)
 
-	go PixelSaver(savechan)
-	SocketHandler(savechan)
+	go PixelSaver(*dbfile, savechan)
+	SocketHandler(*websocket, savechan)
 }
 
 // SocketHandler handles the server-client stuff
-func SocketHandler(savechan chan Response) {
+func SocketHandler(wsURL string, savechan chan Response) {
 	var ws *websocket.Conn
 	var err error
 
 	for {
 		if ws == nil {
-			ws, err = connect("ws://plxs.space/ws", "http://pxls.spcase")
+			ws, err = connect(wsURL, "http://pxls.spcase")
 			if err != nil {
 				log.Printf("connection not established, %v\n", err)
 				time.Sleep(time.Second * 5)
@@ -59,7 +64,7 @@ func SocketHandler(savechan chan Response) {
 }
 
 func connect(url, loc string) (*websocket.Conn, error) {
-	ws, err := websocket.Dial("ws://pxls.space/ws", "", "http://pxls.space")
+	ws, err := websocket.Dial(url, "", loc)
 	if err != nil {
 		return nil, err
 	}
@@ -67,10 +72,10 @@ func connect(url, loc string) (*websocket.Conn, error) {
 }
 
 // PixelSaver saves it tothe database
-func PixelSaver(c chan Response) {
+func PixelSaver(dbfile string, c chan Response) {
 	var pixels []Pixel
 
-	initdb()
+	initdb(dbfile)
 	for {
 		r := <-c
 		for _, p := range r.Pixels {
@@ -79,7 +84,7 @@ func PixelSaver(c chan Response) {
 		}
 
 		if len(pixels) > 100 {
-			// save to db
+			// save to db, and reset cache
 			massInsert(pixels)
 			pixels = pixels[:0]
 		}
